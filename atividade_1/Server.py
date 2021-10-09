@@ -5,11 +5,14 @@ import sys
 import traceback
 import threading
 import select
+from cryptography.fernet import Fernet
 
 SOCKET_LIST = []
 TO_BE_SENT = []
 SENT_BY = {}
-
+clients_token = ''
+key = Fernet.generate_key()
+fernet = Fernet(key)
 
 class Server(threading.Thread):
 
@@ -20,7 +23,7 @@ class Server(threading.Thread):
         self.sock.bind(('', 5535))
         self.sock.listen(2)
         SOCKET_LIST.append(self.sock)
-        print("Server started on port 5535")
+        print("Server started on port 5535")        
 
     def run(self):
         while 1:
@@ -29,9 +32,10 @@ class Server(threading.Thread):
                 if sock == self.sock:
                     sockfd, addr = self.sock.accept()
                     print(str(addr))
-
+                    
                     SOCKET_LIST.append(sockfd)
                     print(SOCKET_LIST[len(SOCKET_LIST) - 1])
+                    sockfd.sendall(key)
 
                 else:
                     try:

@@ -7,7 +7,7 @@ import threading
 import select
 import traceback
 
-
+from cryptography.fernet import Fernet
 class Server(threading.Thread):
     def initialise(self, receive):
         self.receive = receive
@@ -29,6 +29,9 @@ class Server(threading.Thread):
 
 
 class Client(threading.Thread):
+
+    connection_key = ''
+
     def connect(self, host, port):
         self.sock.connect((host, port))
 
@@ -58,6 +61,9 @@ class Client(threading.Thread):
         srv.daemon = True
         print("Starting service")
         srv.start()
+        connection_key = receive.recv(1024)
+        fernet = Fernet(connection_key)
+
         while 1:
             # print "Waiting for message\n"
             msg = input('>>')
@@ -68,7 +74,11 @@ class Client(threading.Thread):
             # print "Sending\n"
             msg = user_name + ': ' + msg
             data = msg.encode()
-            self.client(host, port, data)
+            self.client(
+                host, 
+                port, 
+                fernet.encrypt(data)
+            )
         return (1)
 
 
