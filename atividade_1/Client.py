@@ -8,29 +8,41 @@ import select
 import traceback
 
 from cryptography.fernet import Fernet
+
+connection_key = ''
 class Server(threading.Thread):
+
     def initialise(self, receive):
         self.receive = receive
 
     def run(self):
+        global connection_key
         lis = []
         lis.append(self.receive)
+
         while 1:
             read, write, err = select.select(lis, [], [])
             for item in read:
+                if connection_key != '':
+                    fernet = Fernet(connection_key)               
                 try:
                     s = item.recv(1024)
                     if s != '':
                         chunk = s
-                        print(chunk.decode() + '\n>>')
+                        if connection_key != '':
+                            decoded = fernet.decrypt(chunk)                        
+                            print('\t' + decoded.decode() + '\n>>')
+                        else:
+                            print(chunk.decode() + '\n>>')
                 except:
                     traceback.print_exc(file=sys.stdout)
                     break
-
+    
+    # def saveKey(self, key):
+    #     connection_key = key
+    #     return connection_key
 
 class Client(threading.Thread):
-
-    connection_key = ''
 
     def connect(self, host, port):
         self.sock.connect((host, port))
@@ -61,6 +73,7 @@ class Client(threading.Thread):
         srv.daemon = True
         print("Starting service")
         srv.start()
+        global connection_key
         connection_key = receive.recv(1024)
         fernet = Fernet(connection_key)
 
