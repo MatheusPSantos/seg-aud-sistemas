@@ -6,10 +6,13 @@ import time
 import threading
 import select
 import traceback
+from cryptography.hazmat.backends import default_backend
 
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.backends import openssl
 from cryptography.hazmat.primitives import _serialization, hashes
-import json
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
 
 chave_servidor_str = ""
@@ -30,7 +33,6 @@ class Server(threading.Thread):
                     if s != '':                        
                         if s.decode().__contains__("chave_servidor="):
                             chave_servidor_str = s.decode().split("chave_servidor=")[1]
-                        
                         chunk = s
                         print(chunk.decode() + '\n>>')
                 except:
@@ -72,11 +74,18 @@ class Client(threading.Thread):
         srv.initialise(receive)
         srv.daemon = True
         print("Starting service")
-
-        p_bytes=self.chave_publica.public_bytes(encoding=_serialization.Encoding.OpenSSH, format=_serialization.PublicFormat.OpenSSH)        
-        ##self.client(host, port, self.chave_publica.public_bytes(encoding=_serialization.Encoding.OpenSSH, format=_serialization.PublicFormat.OpenSSH))
+        p_bytes = self.chave_publica.public_bytes(encoding=_serialization.Encoding.OpenSSH, format=_serialization.PublicFormat.OpenSSH)        
+        
         srv.start()
-        print("chave server ", chave_servidor_str)
+        print("chave server  >>> ", chave_servidor_str)
+
+        print("chave em bytes >>> ", chave_servidor_str.encode())
+
+        chave_publica_servidor = load_ssh_public_key(
+            chave_servidor_str.encode(),
+            backend=default_backend()
+        )
+
         while 1:
             # print "Waiting for message\n"
             msg = input('>>')
@@ -88,13 +97,19 @@ class Client(threading.Thread):
             msg = user_name + ': ' + msg
             data = msg.encode()
             
+            mensagem_cifrada = chave_publica_servidor.encrypt(
+                data,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
             
             payload = []
             payload.append(p_bytes)
-            payload.append(data)
+            payload.append(mensagem_cifrada)        
 
-            print('payload >> ', payload.__str__())
-            
             self.client(host, port, payload.__str__().encode())
         return (1)
 

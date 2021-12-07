@@ -26,10 +26,16 @@ class Server(threading.Thread):
 
         self.chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.chave_publica = self.chave_privada.public_key()
+        self.chave_publica_bytes  = self.chave_publica.public_bytes(
+            encoding=_serialization.Encoding.OpenSSH,
+            format=_serialization.PublicFormat.OpenSSH
+        )
 
         print("Server started on port 5535")
+        print("chave publica do servidor >>> ", self.chave_publica_bytes)
 
     def run(self):
+        
         while 1:
             read, write, err = select.select(SOCKET_LIST, [], [], 0)
             for sock in read:
@@ -39,11 +45,11 @@ class Server(threading.Thread):
 
                     SOCKET_LIST.append(sockfd)
                     print(SOCKET_LIST[len(SOCKET_LIST) - 1])
-                    sockfd.sendall(b"chave_servidor=" + self.chave_publica.public_bytes(encoding=_serialization.Encoding.OpenSSH, format=_serialization.PublicFormat.OpenSSH))
+                    sockfd.sendall(b"chave_servidor=" + self.chave_publica_bytes)
 
                 else:
                     try:
-                        s = sock.recv(1024)
+                        s = sock.recv(2048)
                         print('s >>> ', s)
                         if s == '':
                             print(str(sock.getpeername()))
