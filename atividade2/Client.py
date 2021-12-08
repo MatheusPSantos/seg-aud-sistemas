@@ -12,29 +12,61 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.backends import openssl
 from cryptography.hazmat.primitives import _serialization, hashes
-from cryptography.hazmat.primitives.serialization import load_ssh_public_key
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key, load_ssh_private_key
+from ast import literal_eval
 
 
-chave_servidor_str = ""
-
+chave_privada = None
+chave_publica = None
+chave_publica_servidor = None
+chave_publica_servidor_bytes = None
 class Server(threading.Thread):
     def initialise(self, receive):
         self.receive = receive
 
     def run(self):
+        global chave_privada, chave_publica, chave_publica_servidor
         lis = []
         lis.append(self.receive)
-        global chave_servidor_str
+
         while 1:
             read, write, err = select.select(lis, [], [])
             for item in read:
                 try:
-                    s = item.recv(2048)                    
-                    if s != '':                        
-                        if s.decode().__contains__("chave_servidor="):
-                            chave_servidor_str = s.decode().split("chave_servidor=")[1]
-                        chunk = s
-                        print(chunk.decode() + '\n>>')
+                    s = item.recv(2048)
+                    if s != '':                    
+                        #if s.decode().__contains__("{key:"): # mensagem vindo com {chave, texto_cifrado}
+                            # então possui a chave e a mensagm cifrada
+                        chunk = s.decode()
+                        mensagem_descriptografada = chave_privada.decrypt(
+                            chunk.encode(),
+                            padding.OAEP(
+                                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                algorithm=hashes.SHA256(),
+                                label=None
+                            )
+                        )
+                        print("<<< " + mensagem_descriptografada.decode() + "\n")
+                                            
+                            # chave do remetente
+                            #chave_publica_remetente = lista_dado[0]
+                            #print('\nchave publica retemente << ', chave_publica_remetente)
+                            # mensagem cifrada pelo remetente
+                            #mensagem_cifrada_remetente = lista_dado[1]
+                            #print('\nmensagem cifrada remetente << ', mensagem_cifrada_remetente)
+                            # descriptografando a mensagem
+                            #mensagem_desciptografada = chave_publica.decrypt(
+                            #    mensagem_cifrada_remetente,
+                            #    padding.OAEP(
+                            #        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                            #        algorithm=hashes.SHA256(),
+                            #        label=None
+                            #    )
+                            #)
+
+                            #print(mensagem_desciptografada.encode() + "\n<< ")
+                        # else:
+                        #     print(chunk + "\n<< ")                            
                 except:
                     traceback.print_exc(file=sys.stdout)
                     break
@@ -43,7 +75,8 @@ class Server(threading.Thread):
 class Client(threading.Thread):
 
     def connect(self, host, port):
-        self.sock.connect((host, port))
+        #self.sock.connect((host, port))
+        self.sock.connect(("localhost", 5535))
 
     def client(self, host, port, msg):
         sent = self.sock.send(msg)
@@ -52,20 +85,18 @@ class Client(threading.Thread):
     def run(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        try:
-            host = input("Enter the server IP \n>>")
-            port = int(input("Enter the server Destination Port\n>>"))
+        # try:
+        #     host = input("Enter the server IP \n>>")
+        #     port = int(input("Enter the server Destination Port\n>>"))
 
-
-        except EOFError:
-            print("Error")
-            return 1
-
+        # except EOFError:
+        #     print("Error")
+        #     return 1
         print("Connecting\n")
         s = ''
+        host = "localhost"
+        port = 5535
         self.connect(host, port)
-        self.charve_privada = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        self.chave_publica = self.charve_privada.public_key()
         print("Connected\n")
         user_name = input("Enter the User Name to be Used\n>>")
         receive = self.sock
@@ -74,17 +105,26 @@ class Client(threading.Thread):
         srv.initialise(receive)
         srv.daemon = True
         print("Starting service")
-        p_bytes = self.chave_publica.public_bytes(encoding=_serialization.Encoding.OpenSSH, format=_serialization.PublicFormat.OpenSSH)        
-        
         srv.start()
-        print("chave server  >>> ", chave_servidor_str)
 
-        print("chave em bytes >>> ", chave_servidor_str.encode())
+        global chave_publica_servidor_bytes
+        time.sleep(1)
+        chave_publica_servidor_bytes = self.sock.recv(2048)
+        print("recebeu a chave publica do server ...")
+        global chave_publica_servidor
+        chave_publica_servidor = load_ssh_public_key(chave_publica_servidor_bytes, default_backend())
+        
+        global chave_privada
+        chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        global chave_publica
+        chave_publica = chave_privada.public_key()
 
-        chave_publica_servidor = load_ssh_public_key(
-            chave_servidor_str.encode(),
-            backend=default_backend()
+
+        self.chave_publica_bytes = chave_publica.public_bytes(
+            encoding=_serialization.Encoding.OpenSSH,
+            format=_serialization.PublicFormat.OpenSSH
         )
+        self.client(host, port, b"[handshake]:"+self.chave_publica_bytes)
 
         while 1:
             # print "Waiting for message\n"
@@ -98,18 +138,12 @@ class Client(threading.Thread):
             data = msg.encode()
             
             mensagem_cifrada = chave_publica_servidor.encrypt(
-                data,
-                padding.OAEP(
+                data, padding.OAEP(
                     mgf=padding.MGF1(algorithm=hashes.SHA256()),
                     algorithm=hashes.SHA256(),
                     label=None
-                )
-            )
-            
-            payload = []
-            payload.append(p_bytes)
-            payload.append(mensagem_cifrada)        
-
+            ))            
+            payload = {"key": self.chave_publica_bytes, "cifrado": mensagem_cifrada}
             self.client(host, port, payload.__str__().encode())
         return (1)
 
