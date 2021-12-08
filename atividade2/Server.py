@@ -48,9 +48,9 @@ class Server(threading.Thread):
                     print(str(addr))
                     SOCKET_LIST.append(sockfd)
                     print(SOCKET_LIST[len(SOCKET_LIST) - 1])
-                    global chave_publica_bytes
+                    global chave_publica_bytes                    
                     sockfd.sendall(chave_publica_bytes) # envia a chave publica assim que alguem se conecta
-
+                    print("Enviando chave publica do server ...")
                 else:
                     try:
                         s = sock.recv(2048)
@@ -93,15 +93,10 @@ class handle_connections(threading.Thread):
                         #precisa iterar sobre a banco de chaves publicas, encriptar para cada chave e enviar para cada uma
                         for key in HOST_PUBLIC_KEY:
                             try:
-                                print(str(key))
-                                print("----")
-                                print(str(s.getpeername()))
-                                if(str(s.getpeername()) == str(key)):
-                                    print("ignorar a criptografia para ", (str(key)))
-                                else:
+                                if(str(s.getpeername()) != str(key)):
                                     global chave_publica_externa
                                     chave_publica_externa = load_ssh_public_key(
-                                        HOST_PUBLIC_KEY[key].encode(),
+                                        HOST_PUBLIC_KEY[str(s.getpeername())].encode(),
                                         default_backend()
                                     )
                                     texto_cifrado_server = chave_publica_externa.encrypt(
@@ -112,15 +107,13 @@ class handle_connections(threading.Thread):
                                             label=None
                                         )
                                     )
-                                    print('enviando para %s'%str(key))
-                                    s.sendto(texto_cifrado_server, literal_eval(key))
+                                    print('Enviando mensagem criptografada para -> %s'%str(s.getpeername()))
+                                    s.sendto(texto_cifrado_server, literal_eval(str(s.getpeername())))
+                                else:
+                                    print("Ignorar criptografia para -> ", (str(key)))                                   
                                     
                             except:
-                                traceback.print_exc(file=sys.stdout)
-
-                        #print("Sending to %s" % (str(s.getpeername())))
-                        #s.send(items)
-
+                                traceback.print_exc(file=sys.stdout)                       
                     except:
                         traceback.print_exc(file=sys.stdout)
 

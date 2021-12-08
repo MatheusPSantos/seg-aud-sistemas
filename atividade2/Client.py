@@ -25,7 +25,7 @@ class Server(threading.Thread):
         self.receive = receive
 
     def run(self):
-        global chave_privada, chave_publica, chave_publica_servidor
+        global chave_privada, chave_publica, chave_publica_servidor, chave_publica_servidor_bytes
         lis = []
         lis.append(self.receive)
 
@@ -34,39 +34,16 @@ class Server(threading.Thread):
             for item in read:
                 try:
                     s = item.recv(2048)
-                    if s != '':                    
-                        #if s.decode().__contains__("{key:"): # mensagem vindo com {chave, texto_cifrado}
-                            # então possui a chave e a mensagm cifrada
-                        chunk = s.decode()
+                    if s != '':
                         mensagem_descriptografada = chave_privada.decrypt(
-                            chunk.encode(),
+                            s,
                             padding.OAEP(
                                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                                 algorithm=hashes.SHA256(),
                                 label=None
                             )
                         )
-                        print("<<< " + mensagem_descriptografada.decode() + "\n")
-                                            
-                            # chave do remetente
-                            #chave_publica_remetente = lista_dado[0]
-                            #print('\nchave publica retemente << ', chave_publica_remetente)
-                            # mensagem cifrada pelo remetente
-                            #mensagem_cifrada_remetente = lista_dado[1]
-                            #print('\nmensagem cifrada remetente << ', mensagem_cifrada_remetente)
-                            # descriptografando a mensagem
-                            #mensagem_desciptografada = chave_publica.decrypt(
-                            #    mensagem_cifrada_remetente,
-                            #    padding.OAEP(
-                            #        mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                            #        algorithm=hashes.SHA256(),
-                            #        label=None
-                            #    )
-                            #)
-
-                            #print(mensagem_desciptografada.encode() + "\n<< ")
-                        # else:
-                        #     print(chunk + "\n<< ")                            
+                        print("<<< " + mensagem_descriptografada.decode())
                 except:
                     traceback.print_exc(file=sys.stdout)
                     break
@@ -77,7 +54,6 @@ class Client(threading.Thread):
     def connect(self, host, port):
         #self.sock.connect((host, port))
         self.sock.connect(("localhost", 5535))
-
     def client(self, host, port, msg):
         sent = self.sock.send(msg)
         # print "Sent\n"
@@ -98,8 +74,15 @@ class Client(threading.Thread):
         port = 5535
         self.connect(host, port)
         print("Connected\n")
-        user_name = input("Enter the User Name to be Used\n>>")
         receive = self.sock
+        
+        global chave_publica_servidor_bytes
+        chave_publica_servidor_bytes = receive.recv(2048)        
+        print("recebeu a chave publica do server ...")
+        global chave_publica_servidor
+        chave_publica_servidor = load_ssh_public_key(chave_publica_servidor_bytes, default_backend())
+
+        user_name = input("Enter the User Name to be Used\n>>")
         time.sleep(1)
         srv = Server()
         srv.initialise(receive)
@@ -107,13 +90,6 @@ class Client(threading.Thread):
         print("Starting service")
         srv.start()
 
-        global chave_publica_servidor_bytes
-        time.sleep(1)
-        chave_publica_servidor_bytes = self.sock.recv(2048)
-        print("recebeu a chave publica do server ...")
-        global chave_publica_servidor
-        chave_publica_servidor = load_ssh_public_key(chave_publica_servidor_bytes, default_backend())
-        
         global chave_privada
         chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         global chave_publica
