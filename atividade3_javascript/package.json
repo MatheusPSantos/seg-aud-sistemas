@@ -4,6 +4,7 @@
   "description": "atividade 3 da disciplina de segurança de sistemas",
   "main": "main.js",
   "scripts": {
+    "start": "node main.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "matheuspsantos",

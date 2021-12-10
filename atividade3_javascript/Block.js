@@ -16,8 +16,6 @@ class Block {
     new(data, hash_anterior, nonce) {
         return new Block(data, hash_anterior, nonce)
     }
-
-    validar() {}
 }
 
 module.exports = Block;
